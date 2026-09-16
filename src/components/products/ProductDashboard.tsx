@@ -1,28 +1,14 @@
 "use client";
 
-import {
-  Suspense,
-  useCallback,
-  useEffect,
-  useState,
-} from "react";
-import {
-  useRouter,
-  useSearchParams,
-} from "next/navigation";
+import {Suspense,useCallback,useEffect,useState} from "react";
+import {useRouter,useSearchParams} from "next/navigation";
 
 import { useDebounce } from "@/hooks/useDebounce";
 import { useAuth } from "@/hooks/useAuth";
 
-import {
-  getCategories,
-  getProducts,
-} from "@/services/product.service";
+import {getCategories,getProducts} from "@/services/product.service";
 
-import {
-  Category,
-  Product,
-} from "@/types/product";
+import {Category,Product} from "@/types/product";
 
 import ProductTable from "@/components/products/ProductTable";
 import ProductCards from "@/components/products/ProductCards";
@@ -641,16 +627,28 @@ function ProductDashboardContent() {
       {/* Main content */}
       <section className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
 
-        <div className="mb-6">
-          <h2 className="text-2xl font-bold text-gray-900">
-            Products
-          </h2>
+        <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
 
-          <p className="mt-1 text-sm text-gray-500">
-            Browse and manage your product
-            inventory.
-          </p>
-        </div>
+  <div>
+    <h2 className="text-2xl font-bold text-gray-900">
+      Products
+    </h2>
+
+    <p className="mt-1 text-sm text-gray-500">
+      Browse and manage your product
+      inventory.
+    </p>
+  </div>
+
+  <button
+    onClick={() =>
+      router.push("/products/add")
+    }
+    className="rounded-lg bg-black px-4 py-2.5 text-sm font-medium text-white transition hover:bg-gray-800">
+    + Add Product
+  </button>
+
+</div>
 
         {/* Search / Filters */}
         <div className="mb-6 rounded-xl border bg-white p-4 shadow-sm">
