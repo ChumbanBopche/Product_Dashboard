@@ -21,24 +21,25 @@ export const getProducts = async (
 
   let endpoint = "/products";
 
-  // DummyJSON does not support search + category together.
-  // Search takes priority when both are provided.
   if (search) {
     endpoint = "/products/search";
   } else if (category) {
     endpoint = `/products/category/${category}`;
   }
 
-  const response = await api.get<ProductListResponse>(endpoint, {
-    params: {
-      limit,
-      skip,
-      ...(search ? { q: search } : {}),
-      ...(sortBy ? { sortBy } : {}),
-      ...(order ? { order } : {}),
-    },
-    signal,
-  });
+  const response = await api.get<ProductListResponse>(
+    endpoint,
+    {
+      params: {
+        limit,
+        skip,
+        ...(search ? { q: search } : {}),
+        ...(sortBy ? { sortBy } : {}),
+        ...(order ? { order } : {}),
+      },
+      signal,
+    }
+  );
 
   return response.data;
 };
