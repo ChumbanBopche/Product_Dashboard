@@ -2,12 +2,8 @@
 
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
-
-import {
-  addProduct,
-  updateProduct,
-} from "@/services/product.service";
-
+import {addProduct,updateProduct} from "@/services/product.service";
+import {saveAddedProduct,saveUpdatedProduct} from "@/lib/productStorage";
 import { Product } from "@/types/product";
 
 interface ProductFormProps {
@@ -81,56 +77,45 @@ export default function ProductForm({
   // -----------------------------
 
   const validate = () => {
-    const newErrors: Record<
-      string,
-      string
-    > = {};
+  const newErrors: Record< string, string > = {};
 
-    if (!formData.title.trim()) {
-      newErrors.title =
-        "Title is required.";
-    }
+  const title = formData.title.trim();
 
-    if (!formData.description.trim()) {
-      newErrors.description =
-        "Description is required.";
-    }
+  const description = formData.description.trim();
 
-    if (!formData.category.trim()) {
-      newErrors.category =
-        "Category is required.";
-    }
+  const category = formData.category.trim();
 
-    const price =
-      Number(formData.price);
+  const price = Number(formData.price);
 
-    if (
-      !formData.price.trim() ||
-      Number.isNaN(price) ||
-      price < 0
-    ) {
-      newErrors.price =
-        "Enter a valid price.";
-    }
+  const stock = Number(formData.stock);
 
-    const stock =
-      Number(formData.stock);
+  if (!title) { newErrors.title = "Title is required."; }
 
-    if (
-      !formData.stock.trim() ||
-      !Number.isInteger(stock) ||
-      stock < 0
-    ) {
-      newErrors.stock =
-        "Enter a valid stock quantity.";
-    }
+  if ( title && title.length < 3) { newErrors.title = "Title must be at least 3 characters."; }
 
-    setErrors(newErrors);
+  if (!description) { newErrors.description = "Description is required."; }
 
-    return (
-      Object.keys(newErrors).length === 0
-    );
-  };
+  if (description &&description.length < 10) {
+  newErrors.description = "Description must be at least 10 characters."; }
+
+  if (!category) { newErrors.category = "Category is required."; }
+
+  if (
+    !formData.price.trim() || !Number.isFinite(price) || price < 0 ) {
+    newErrors.price = "Enter a valid price.";
+  }
+
+  if (
+    !formData.stock.trim() || !Number.isFinite(stock) || !Number.isInteger(stock) || stock < 0 ) {
+    newErrors.stock = "Enter a valid stock quantity.";
+  }
+
+  setErrors(newErrors);
+
+  return (
+    Object.keys(newErrors).length === 0
+  );
+};
 
   // -----------------------------
   // Submit
@@ -166,15 +151,19 @@ export default function ProductForm({
       };
 
       if (isEditMode && product) {
-        await updateProduct(
+        const updatedProduct = await updateProduct(
           product.id,
           payload
         );
-      } else {
-        await addProduct(payload);
-      }
 
-      router.push("/products");
+        saveUpdatedProduct(updatedProduct);
+      } else {
+        const addedProduct = await addProduct(payload);
+        saveAddedProduct(addedProduct);
+      }
+      router.push(
+        isEditMode ? "/products" : "/products?page=1"
+      );
     } catch (error) {
       console.error(error);
 

@@ -4,6 +4,7 @@ import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 
+import { saveDeletedProduct } from "@/lib/productStorage";
 import { deleteProduct } from "@/services/product.service";
 import { Product } from "@/types/product";
 
@@ -40,6 +41,11 @@ export default function ProductTable({
 
       await deleteProduct(product.id);
 
+      // DummyJSON does not permanently delete
+      // the product, so save the deletion locally.
+      saveDeletedProduct(product.id);
+
+      // Update the dashboard immediately.
       onDeleted?.(product.id);
     } catch (error) {
       console.error(error);
@@ -54,14 +60,12 @@ export default function ProductTable({
 
   return (
     <div className="hidden overflow-hidden rounded-xl border bg-white shadow-sm md:block">
-
       <div className="overflow-x-auto">
-
         <table className="w-full text-left text-sm">
 
+          {/* Header */}
           <thead className="border-b bg-gray-50">
             <tr>
-
               <th className="px-6 py-4 font-semibold">
                 Product
               </th>
@@ -85,12 +89,11 @@ export default function ProductTable({
               <th className="px-6 py-4 font-semibold">
                 Actions
               </th>
-
             </tr>
           </thead>
 
+          {/* Products */}
           <tbody className="divide-y">
-
             {products.map((product) => (
               <tr
                 key={product.id}
@@ -99,19 +102,23 @@ export default function ProductTable({
 
                 {/* Product */}
                 <td className="px-6 py-4">
-
                   <div className="flex items-center gap-3">
 
-                    <Image
-                      src={product.thumbnail}
-                      alt={product.title}
-                      width={56}
-                      height={56}
-                      className="h-14 w-14 rounded-lg object-cover"
-                    />
+                    {product.thumbnail ? (
+                      <Image
+                        src={product.thumbnail}
+                        alt={product.title}
+                        width={56}
+                        height={56}
+                        className="h-14 w-14 rounded-lg object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-14 w-14 items-center justify-center rounded-lg bg-gray-100 text-xs text-gray-400">
+                        No image
+                      </div>
+                    )}
 
                     <div>
-
                       <p className="font-medium text-gray-900">
                         {product.title}
                       </p>
@@ -119,11 +126,9 @@ export default function ProductTable({
                       <p className="mt-1 text-xs text-gray-500">
                         #{product.id}
                       </p>
-
                     </div>
 
                   </div>
-
                 </td>
 
                 {/* Category */}
@@ -133,37 +138,35 @@ export default function ProductTable({
 
                 {/* Price */}
                 <td className="px-6 py-4 font-medium">
-                  ${product.price.toFixed(2)}
+                  ${(product.price ?? 0).toFixed(2)}
                 </td>
 
                 {/* Rating */}
                 <td className="px-6 py-4">
-
                   <span className="flex items-center gap-1">
                     <span>⭐</span>
-                    {product.rating.toFixed(2)}
-                  </span>
 
+                    <span>
+                      {(product.rating ?? 0).toFixed(2)}
+                    </span>
+                  </span>
                 </td>
 
                 {/* Stock */}
                 <td className="px-6 py-4">
-
                   <span
                     className={
-                      product.stock > 0
+                      (product.stock ?? 0) > 0
                         ? "text-green-600"
                         : "text-red-600"
                     }
                   >
-                    {product.stock}
+                    {product.stock ?? 0}
                   </span>
-
                 </td>
 
                 {/* Actions */}
                 <td className="px-6 py-4">
-
                   <div className="flex items-center gap-3">
 
                     <Link
@@ -196,18 +199,14 @@ export default function ProductTable({
                     </button>
 
                   </div>
-
                 </td>
 
               </tr>
             ))}
-
           </tbody>
 
         </table>
-
       </div>
-
     </div>
   );
 }

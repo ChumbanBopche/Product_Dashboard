@@ -10,23 +10,36 @@ const api = axios.create({
 // Attach authentication token to every request
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem("authToken");
+    // localStorage only exists in the browser
+    if (typeof window !== "undefined") {
+      const token =
+        localStorage.getItem("authToken");
 
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+      if (token) {
+        config.headers.Authorization =
+          `Bearer ${token}`;
+      }
     }
 
     return config;
   },
-  (error) => Promise.reject(error)
+  (error) => {
+    return Promise.reject(error);
+  }
 );
 
-// Handle API errors in one place
+// Centralized response/error handling
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    return response;
+  },
   (error) => {
-    if (error.response?.status === 401) {
+    if (
+      error.response?.status === 401 &&
+      typeof window !== "undefined"
+    ) {
       localStorage.removeItem("authToken");
+      localStorage.removeItem("user");
     }
 
     return Promise.reject(error);

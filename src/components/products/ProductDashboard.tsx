@@ -1,14 +1,32 @@
 "use client";
 
-import {Suspense,useCallback,useEffect,useState} from "react";
-import {useRouter,useSearchParams} from "next/navigation";
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useState,
+} from "react";
+import {
+  useRouter,
+  useSearchParams,
+} from "next/navigation";
 
 import { useDebounce } from "@/hooks/useDebounce";
 import { useAuth } from "@/hooks/useAuth";
 
-import {getCategories,getProducts} from "@/services/product.service";
+import {
+  getLocalChanges,
+} from "@/lib/productStorage";
 
-import {Category,Product} from "@/types/product";
+import {
+  getCategories,
+  getProducts,
+} from "@/services/product.service";
+
+import {
+  Category,
+  Product,
+} from "@/types/product";
 
 import ProductTable from "@/components/products/ProductTable";
 import ProductCards from "@/components/products/ProductCards";
@@ -16,6 +34,9 @@ import LoadingState from "@/components/ui/LoadingState";
 import ErrorState from "@/components/ui/ErrorState";
 
 const PAGE_SIZES = [10, 20, 50];
+const isValidPageSize = (value: number) => {
+  return PAGE_SIZES.includes(value);
+};
 
 function parsePositiveInteger(
   value: string | null,
@@ -65,8 +86,7 @@ function ProductDashboardContent() {
     500
   );
 
-  // Keep search input synchronized
-  // with URL
+  // Keep search input synchronized with URL
   useEffect(() => {
     setSearchInput(urlSearch);
   }, [urlSearch]);
@@ -100,8 +120,8 @@ function ProductDashboardContent() {
   const [order, setOrder] =
     useState(urlOrder);
 
-  // Keep category and sorting
-  // synchronized with URL
+  // Keep category and sorting synchronized
+  // with URL
   useEffect(() => {
     setCategory(urlCategory);
     setSortBy(urlSortBy);
@@ -117,25 +137,95 @@ function ProductDashboardContent() {
   // -----------------------------
 
   const requestedPage =
+  parsePositiveInteger(
+    searchParams.get("page"),
+    1
+  );
+
+const requestedPageSize =
+  parsePositiveInteger(
+    searchParams.get("pageSize"),
+    10
+  );
+
+const pageSize = isValidPageSize(
+  requestedPageSize
+)
+  ? requestedPageSize
+  : 10;
+
+const page = requestedPage;
+
+useEffect(() => {
+  const urlPage =
+    searchParams.get("page");
+
+  const urlPageSize =
+    searchParams.get("pageSize");
+
+  const parsedPage =
     parsePositiveInteger(
-      searchParams.get("page"),
+      urlPage,
       1
     );
 
-  const requestedPageSize =
+  const parsedPageSize =
     parsePositiveInteger(
-      searchParams.get("pageSize"),
+      urlPageSize,
       10
     );
 
-  const pageSize =
-    PAGE_SIZES.includes(
-      requestedPageSize
+  const validPageSize =
+    isValidPageSize(
+      parsedPageSize
     )
-      ? requestedPageSize
+      ? parsedPageSize
       : 10;
 
-  const page = requestedPage;
+  const pageIsInvalid =
+    urlPage !== null &&
+    (
+      !Number.isInteger(
+        Number(urlPage)
+      ) ||
+      Number(urlPage) < 1
+    );
+
+  const pageSizeIsInvalid =
+    urlPageSize !== null &&
+    !isValidPageSize(
+      parsedPageSize
+    );
+
+  if (
+    !pageIsInvalid &&
+    !pageSizeIsInvalid
+  ) {
+    return;
+  }
+
+  const params =
+    new URLSearchParams(
+      searchParams.toString()
+    );
+
+  params.set(
+    "page",
+    String(parsedPage)
+  );
+
+  params.set(
+    "pageSize",
+    String(validPageSize)
+  );
+
+  router.replace(
+    `/products?${params.toString()}`
+  );
+}, [
+  searchParams,
+  router,
+]);
 
   // -----------------------------
   // Fetch categories
@@ -149,38 +239,39 @@ function ProductDashboardContent() {
     const controller =
       new AbortController();
 
-    const fetchCategories =
-      async () => {
-        try {
-          const data =
-            await getCategories(
-              controller.signal
-            );
-
-          setCategories(data);
-        } catch (error: unknown) {
-          if (
-            error instanceof Error &&
-            error.name === "CanceledError"
-          ) {
-            return;
-          }
-
-          if (
-            typeof error === "object" &&
-            error !== null &&
-            "code" in error &&
-            error.code === "ERR_CANCELED"
-          ) {
-            return;
-          }
-
-          console.error(
-            "Failed to load categories:",
-            error
+    const fetchCategories = async () => {
+      try {
+        const data =
+          await getCategories(
+            controller.signal
           );
+
+        setCategories(data);
+      } catch (error: unknown) {
+        // Ignore cancelled requests
+        if (
+          error instanceof Error &&
+          error.name === "CanceledError"
+        ) {
+          return;
         }
-      };
+
+        // Axios cancellation error
+        if (
+          typeof error === "object" &&
+          error !== null &&
+          "code" in error &&
+          error.code === "ERR_CANCELED"
+        ) {
+          return;
+        }
+
+        console.error(
+          "Failed to load categories:",
+          error
+        );
+      }
+    };
 
     fetchCategories();
 
@@ -218,14 +309,18 @@ function ProductDashboardContent() {
             ? order
             : undefined;
 
+        /*
+         * DummyJSON does not support combining
+         * search and category filtering.
+         *
+         * Therefore search takes priority.
+         */
         const data =
           await getProducts(
             {
               limit: pageSize,
               skip,
 
-              // Search has priority over
-              // category filtering.
               search:
                 currentSearch ||
                 undefined,
@@ -236,14 +331,218 @@ function ProductDashboardContent() {
                   : undefined,
 
               sortBy: validSortBy,
-
               order: validOrder,
             },
             signal
           );
 
-        setProducts(data.products);
-        setTotal(data.total);
+        /*
+         * -----------------------------------------
+         * Apply local CRUD changes
+         * -----------------------------------------
+         *
+         * DummyJSON does not permanently save
+         * POST / PUT / DELETE operations.
+         *
+         * We therefore merge our local changes
+         * with the API response.
+         */
+        const changes =
+          getLocalChanges();
+
+        // -----------------------------------------
+        // 1. Apply locally updated products
+        // -----------------------------------------
+
+        const updatedProducts =
+          data.products.map(
+            (product) => {
+              const localUpdated =
+                changes.updated.find(
+                  (item) =>
+                    item.id === product.id
+                );
+
+              return (
+                localUpdated ?? product
+              );
+            }
+          );
+
+        // -----------------------------------------
+        // 2. Remove locally deleted products
+        // -----------------------------------------
+
+        const filteredProducts =
+          updatedProducts.filter(
+            (product) =>
+              !changes.deletedIds.includes(
+                product.id
+              )
+          );
+
+        // -----------------------------------------
+        // 3. Find locally added products
+        // -----------------------------------------
+
+        let localAddedProducts =
+          changes.added;
+
+        /*
+         * Apply search to locally added products.
+         */
+        if (currentSearch) {
+          const search =
+            currentSearch.toLowerCase();
+
+          localAddedProducts =
+            localAddedProducts.filter(
+              (product) =>
+                product.title
+                  .toLowerCase()
+                  .includes(search) ||
+                product.description
+                  .toLowerCase()
+                  .includes(search) ||
+                product.category
+                  .toLowerCase()
+                  .includes(search)
+            );
+        }
+
+        /*
+         * Apply category filter to
+         * locally added products.
+         */
+        if (
+          !currentSearch &&
+          category
+        ) {
+          localAddedProducts =
+            localAddedProducts.filter(
+              (product) =>
+                product.category ===
+                category
+            );
+        }
+
+        /*
+         * Apply sorting to locally added
+         * products.
+         */
+        if (validSortBy) {
+          localAddedProducts.sort(
+            (a, b) => {
+              let comparison = 0;
+
+              if (
+                validSortBy ===
+                "title"
+              ) {
+                comparison =
+                  a.title.localeCompare(
+                    b.title
+                  );
+              }
+
+              if (
+                validSortBy ===
+                "price"
+              ) {
+                comparison =
+                  a.price - b.price;
+              }
+
+              if (
+                validSortBy ===
+                "rating"
+              ) {
+                comparison =
+                  a.rating - b.rating;
+              }
+
+              return validOrder ===
+                "desc"
+                ? -comparison
+                : comparison;
+            }
+          );
+        }
+
+        /*
+         * -----------------------------------------
+         * 4. Add locally created products
+         * -----------------------------------------
+         *
+         * We show locally added products on
+         * page 1. They are not part of the
+         * DummyJSON pagination because they
+         * don't exist on the API server.
+         */
+        let finalProducts =
+  filteredProducts;
+
+const baseTotal =
+  Math.max(
+    0,
+    data.total -
+      data.products.filter(
+        (product) =>
+          changes.deletedIds.includes(
+            product.id
+          )
+      ).length
+  );
+
+const totalWithLocalProducts =
+  baseTotal +
+  localAddedProducts.length;
+
+const lastPage =
+  Math.max(
+    1,
+    Math.ceil(
+      totalWithLocalProducts /
+        pageSize
+    )
+  );
+
+if (page === lastPage) {
+  finalProducts = [
+    ...filteredProducts,
+    ...localAddedProducts,
+  ];
+}
+
+        /*
+         * Prevent duplicate IDs.
+         */
+        const uniqueProducts =
+          finalProducts.filter(
+            (product, index, array) =>
+              array.findIndex(
+                (item) =>
+                  item.id === product.id
+              ) === index
+          );
+
+        setProducts(
+          uniqueProducts
+        );
+
+        // -----------------------------------------
+        // 5. Calculate total
+        // -----------------------------------------
+
+        const calculatedTotal =
+          Math.max(
+            0,
+            data.total -
+              changes.deletedIds.length +
+              localAddedProducts.length
+          );
+
+        setTotal(calculatedTotal);
       } catch (error: unknown) {
         // Ignore cancelled requests
         if (
@@ -319,7 +618,10 @@ function ProductDashboardContent() {
     const nextSearch =
       debouncedSearch.trim();
 
-    if (nextSearch === currentSearch) {
+    if (
+      nextSearch ===
+      currentSearch
+    ) {
       return;
     }
 
@@ -338,7 +640,10 @@ function ProductDashboardContent() {
     }
 
     // Search starts from page 1
-    params.set("page", "1");
+    params.set(
+      "page",
+      "1"
+    );
 
     router.push(
       `/products?${params.toString()}`
@@ -392,6 +697,36 @@ function ProductDashboardContent() {
   ]);
 
   // -----------------------------
+  // If current page becomes empty
+  // -----------------------------
+
+  useEffect(() => {
+    if (
+      total === 0 &&
+      page > 1
+    ) {
+      const params =
+        new URLSearchParams(
+          searchParams.toString()
+        );
+
+      params.set(
+        "page",
+        String(page - 1)
+      );
+
+      router.replace(
+        `/products?${params.toString()}`
+      );
+    }
+  }, [
+    total,
+    page,
+    router,
+    searchParams,
+  ]);
+
+  // -----------------------------
   // Update URL helper
   // -----------------------------
 
@@ -432,11 +767,16 @@ function ProductDashboardContent() {
         newCategory
       );
     } else {
-      params.delete("category");
+      params.delete(
+        "category"
+      );
     }
 
     // Reset pagination
-    params.set("page", "1");
+    params.set(
+      "page",
+      "1"
+    );
 
     router.push(
       `/products?${params.toString()}`
@@ -456,8 +796,12 @@ function ProductDashboardContent() {
       );
 
     if (!newSortBy) {
-      params.delete("sortBy");
-      params.delete("order");
+      params.delete(
+        "sortBy"
+      );
+      params.delete(
+        "order"
+      );
     } else {
       params.set(
         "sortBy",
@@ -472,7 +816,10 @@ function ProductDashboardContent() {
     }
 
     // Reset pagination
-    params.set("page", "1");
+    params.set(
+      "page",
+      "1"
+    );
 
     router.push(
       `/products?${params.toString()}`
@@ -502,7 +849,10 @@ function ProductDashboardContent() {
     }
 
     // Reset pagination
-    params.set("page", "1");
+    params.set(
+      "page",
+      "1"
+    );
 
     router.push(
       `/products?${params.toString()}`
@@ -525,13 +875,17 @@ function ProductDashboardContent() {
         total / pageSize
       );
 
-    if (newPage > totalPages) {
+    if (
+      newPage >
+      totalPages
+    ) {
       return;
     }
 
     updateUrl({
       page: String(newPage),
-      pageSize: String(pageSize),
+      pageSize:
+        String(pageSize),
     });
   };
 
@@ -553,7 +907,9 @@ function ProductDashboardContent() {
   // Authentication loading
   // -----------------------------
 
-  if (isAuthenticated === null) {
+  if (
+    isAuthenticated === null
+  ) {
     return (
       <main className="flex min-h-screen items-center justify-center">
         <p className="text-gray-500">
@@ -589,7 +945,6 @@ function ProductDashboardContent() {
           total
         );
 
-  // Search is currently active
   const isSearchActive =
     searchInput.trim().length > 0;
 
@@ -627,28 +982,32 @@ function ProductDashboardContent() {
       {/* Main content */}
       <section className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
 
+        {/* Title + Add button */}
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
 
-  <div>
-    <h2 className="text-2xl font-bold text-gray-900">
-      Products
-    </h2>
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900">
+              Products
+            </h2>
 
-    <p className="mt-1 text-sm text-gray-500">
-      Browse and manage your product
-      inventory.
-    </p>
-  </div>
+            <p className="mt-1 text-sm text-gray-500">
+              Browse and manage your product
+              inventory.
+            </p>
+          </div>
 
-  <button
-    onClick={() =>
-      router.push("/products/add")
-    }
-    className="rounded-lg bg-black px-4 py-2.5 text-sm font-medium text-white transition hover:bg-gray-800">
-    + Add Product
-  </button>
+          <button
+            onClick={() =>
+              router.push(
+                "/products/add"
+              )
+            }
+            className="rounded-lg bg-black px-4 py-2.5 text-sm font-medium text-white transition hover:bg-gray-800"
+          >
+            + Add Product
+          </button>
 
-</div>
+        </div>
 
         {/* Search / Filters */}
         <div className="mb-6 rounded-xl border bg-white p-4 shadow-sm">
@@ -824,15 +1183,21 @@ function ProductDashboardContent() {
             <ProductTable
               products={products}
               onDeleted={(deletedId) => {
-                setProducts((currentProducts) =>
-                  currentProducts.filter(
-                    (product) =>
-                      product.id !== deletedId
-                  )
+                setProducts(
+                  (currentProducts) =>
+                    currentProducts.filter(
+                      (product) =>
+                        product.id !==
+                        deletedId
+                    )
                 );
 
-                setTotal((currentTotal) =>
-                  Math.max(0, currentTotal - 1)
+                setTotal(
+                  (currentTotal) =>
+                    Math.max(
+                      0,
+                      currentTotal - 1
+                    )
                 );
               }}
             />
@@ -840,6 +1205,24 @@ function ProductDashboardContent() {
             {/* Mobile cards */}
             <ProductCards
               products={products}
+              onDeleted={(deletedId) => {
+                setProducts(
+                  (currentProducts) =>
+                    currentProducts.filter(
+                      (product) =>
+                        product.id !==
+                        deletedId
+                    )
+                );
+
+                setTotal(
+                  (currentTotal) =>
+                    Math.max(
+                      0,
+                      currentTotal - 1
+                    )
+                );
+              }}
             />
 
             {/* Pagination */}
@@ -870,7 +1253,9 @@ function ProductDashboardContent() {
                       page - 1
                     )
                   }
-                  disabled={page === 1}
+                  disabled={
+                    page === 1
+                  }
                   className="rounded-lg border px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   Previous
@@ -879,26 +1264,32 @@ function ProductDashboardContent() {
                 {/* Page numbers */}
                 {Array.from(
                   {
-                    length: totalPages,
+                    length:
+                      totalPages,
                   },
                   (_, index) =>
                     index + 1
                 ).map(
                   (pageNumber) => (
                     <button
-                      key={pageNumber}
+                      key={
+                        pageNumber
+                      }
                       onClick={() =>
                         handlePageChange(
                           pageNumber
                         )
                       }
                       className={`h-9 min-w-9 rounded-lg px-3 text-sm ${
-                        pageNumber === page
+                        pageNumber ===
+                        page
                           ? "bg-black text-white"
                           : "border bg-white text-gray-700 hover:bg-gray-50"
                       }`}
                     >
-                      {pageNumber}
+                      {
+                        pageNumber
+                      }
                     </button>
                   )
                 )}
@@ -911,7 +1302,8 @@ function ProductDashboardContent() {
                     )
                   }
                   disabled={
-                    page === totalPages
+                    page ===
+                    totalPages
                   }
                   className="rounded-lg border px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-40"
                 >
@@ -924,7 +1316,8 @@ function ProductDashboardContent() {
                   onChange={(event) =>
                     handlePageSizeChange(
                       Number(
-                        event.target.value
+                        event.target
+                          .value
                       )
                     )
                   }

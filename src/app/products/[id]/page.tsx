@@ -4,12 +4,14 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 
 import { useAuth } from "@/hooks/useAuth";
+import { getLocalProduct } from "@/lib/productStorage";
 import { getProductById } from "@/services/product.service";
 import { Product } from "@/types/product";
 
 export default function ProductDetailsPage() {
   const params = useParams();
   const router = useRouter();
+
   const { isAuthenticated } = useAuth();
 
   const [product, setProduct] =
@@ -25,11 +27,13 @@ export default function ProductDetailsPage() {
     useState("");
 
   useEffect(() => {
-  if (!isAuthenticated) {
-    return;
-  }
-  const id = Number(params.id);
+    if (!isAuthenticated) {
+      return;
+    }
 
+    const id = Number(params.id);
+
+    // Validate product ID
     if (!Number.isInteger(id) || id < 1) {
       setError("Product not found.");
       setLoading(false);
@@ -44,6 +48,49 @@ export default function ProductDetailsPage() {
         setLoading(true);
         setError("");
 
+        /*
+         * ------------------------------------
+         * Check local CRUD changes first
+         * ------------------------------------
+         */
+        const localProduct =
+          getLocalProduct(id);
+
+        // Product was locally deleted
+        if (localProduct === null) {
+          setError("Product not found.");
+          return;
+        }
+
+        // Product was locally added or edited
+        if (localProduct) {
+          setProduct(localProduct);
+
+          if (
+            localProduct.images &&
+            localProduct.images.length > 0
+          ) {
+            setSelectedImage(
+              localProduct.images[0]
+            );
+          } else if (
+            localProduct.thumbnail
+          ) {
+            setSelectedImage(
+              localProduct.thumbnail
+            );
+          }
+
+          return;
+        }
+
+        /*
+         * ------------------------------------
+         * No local change
+         *
+         * Fetch original product from API
+         * ------------------------------------
+         */
         const data =
           await getProductById(
             id,
@@ -52,12 +99,22 @@ export default function ProductDetailsPage() {
 
         setProduct(data);
 
-        if (data.images?.length > 0) {
+        if (
+          data.images &&
+          data.images.length > 0
+        ) {
           setSelectedImage(
             data.images[0]
           );
+        } else if (
+          data.thumbnail
+        ) {
+          setSelectedImage(
+            data.thumbnail
+          );
         }
       } catch (error: unknown) {
+        // Ignore cancelled requests
         if (
           error instanceof Error &&
           error.name === "CanceledError"
@@ -65,6 +122,7 @@ export default function ProductDetailsPage() {
           return;
         }
 
+        // Axios cancellation
         if (
           typeof error === "object" &&
           error !== null &&
@@ -91,20 +149,31 @@ export default function ProductDetailsPage() {
     return () => {
       controller.abort();
     };
-  }, [params.id, isAuthenticated]);
+  }, [
+    params.id,
+    isAuthenticated,
+  ]);
 
-  // -----------------------------
-  // Loading
-  // -----------------------------
+  /*
+   * ------------------------------------
+   * Authentication loading
+   * ------------------------------------
+   */
   if (isAuthenticated === null) {
-  return (
-    <main className="flex min-h-screen items-center justify-center bg-gray-100">
-      <p className="text-gray-500">
-        Checking authentication...
-      </p>
-    </main>
-  );
-}
+    return (
+      <main className="flex min-h-screen items-center justify-center">
+        <p className="text-gray-500">
+          Checking authentication...
+        </p>
+      </main>
+    );
+  }
+
+  /*
+   * ------------------------------------
+   * Product loading
+   * ------------------------------------
+   */
   if (loading) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-gray-100">
@@ -115,29 +184,30 @@ export default function ProductDetailsPage() {
     );
   }
 
-  // -----------------------------
-  // Error / Not Found
-  // -----------------------------
-
+  /*
+   * ------------------------------------
+   * Product not found
+   * ------------------------------------
+   */
   if (error || !product) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-gray-100 px-4">
         <div className="w-full max-w-md rounded-xl border bg-white p-8 text-center shadow-sm">
 
-          <h1 className="text-2xl font-bold text-gray-900">
+          <h1 className="text-xl font-bold text-gray-900">
             Product Not Found
           </h1>
 
           <p className="mt-2 text-sm text-gray-500">
             The product you are looking for
-            does not exist.
+            does not exist or has been deleted.
           </p>
 
           <button
             onClick={() =>
               router.push("/products")
             }
-            className="mt-6 rounded-lg bg-black px-5 py-2.5 text-sm font-medium text-white transition hover:bg-gray-800"
+            className="mt-6 rounded-lg bg-black px-4 py-2.5 text-sm font-medium text-white transition hover:bg-gray-800"
           >
             Back to Products
           </button>
@@ -147,209 +217,222 @@ export default function ProductDetailsPage() {
     );
   }
 
-  // -----------------------------
-  // Product details
-  // -----------------------------
+  /*
+   * ------------------------------------
+   * Product details
+   * ------------------------------------
+   */
+
+  const images =
+    product.images &&
+    product.images.length > 0
+      ? product.images
+      : product.thumbnail
+        ? [product.thumbnail]
+        : [];
 
   return (
     <main className="min-h-screen bg-gray-100">
 
       {/* Header */}
       <header className="border-b bg-white">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6">
-
-          <div>
-            <h1 className="text-xl font-bold text-gray-900">
-              Product Admin
-            </h1>
-
-            <p className="text-sm text-gray-500">
-              Product details
-            </p>
-          </div>
+        <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6">
 
           <button
             onClick={() =>
               router.push("/products")
             }
-            className="rounded-lg border px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
+            className="text-sm font-medium text-gray-600 hover:text-black"
           >
-            Back to Products
+            ← Back to Products
           </button>
 
         </div>
       </header>
 
-      {/* Product */}
-      <section className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
+      {/* Content */}
+      <section className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
 
-        {/* Product information */}
-        <div className="rounded-xl border bg-white p-6 shadow-sm">
+        <div className="grid gap-8 lg:grid-cols-2">
 
-          <div className="grid gap-8 lg:grid-cols-2">
+          {/* Images */}
+          <div className="rounded-xl border bg-white p-6 shadow-sm">
 
-            {/* Images */}
-            <div>
+            <div className="flex min-h-[400px] items-center justify-center rounded-lg bg-gray-50">
 
-              {/* Main image */}
-              <div className="flex h-96 items-center justify-center overflow-hidden rounded-xl border bg-gray-50">
-
-                {selectedImage ? (
-                  <img
-                    src={selectedImage}
-                    alt={product.title}
-                    className="h-full w-full object-contain p-6"
-                  />
-                ) : (
-                  <p className="text-gray-400">
-                    No image available
-                  </p>
-                )}
-
-              </div>
-
-              {/* Image thumbnails */}
-              {product.images?.length > 1 && (
-                <div className="mt-4 flex gap-3 overflow-x-auto">
-
-                  {product.images.map(
-                    (image, index) => (
-                      <button
-                        key={image}
-                        onClick={() =>
-                          setSelectedImage(
-                            image
-                          )
-                        }
-                        className={`h-20 w-20 flex-shrink-0 overflow-hidden rounded-lg border-2 bg-gray-50 ${
-                          selectedImage === image
-                            ? "border-black"
-                            : "border-gray-200"
-                        }`}
-                      >
-                        <img
-                          src={image}
-                          alt={`${product.title} ${index + 1}`}
-                          className="h-full w-full object-contain p-1"
-                        />
-                      </button>
-                    )
-                  )}
-
+              {selectedImage ? (
+                <img
+                  src={selectedImage}
+                  alt={product.title}
+                  className="max-h-[400px] max-w-full object-contain"
+                />
+              ) : (
+                <div className="text-sm text-gray-400">
+                  No image available
                 </div>
               )}
 
             </div>
 
-            {/* Product information */}
-            <div>
+            {/* Thumbnails */}
+            {images.length > 1 && (
+              <div className="mt-4 flex gap-3 overflow-x-auto">
 
-              <div className="flex flex-wrap gap-2">
-
-                <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700">
-                  {product.category}
-                </span>
-
-                {product.brand && (
-                  <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700">
-                    {product.brand}
-                  </span>
+                {images.map(
+                  (image, index) => (
+                    <button
+                      key={`${image}-${index}`}
+                      onClick={() =>
+                        setSelectedImage(
+                          image
+                        )
+                      }
+                      className={`shrink-0 rounded-lg border-2 p-1 ${
+                        selectedImage ===
+                        image
+                          ? "border-black"
+                          : "border-transparent"
+                      }`}
+                    >
+                      <img
+                        src={image}
+                        alt={`${product.title} ${
+                          index + 1
+                        }`}
+                        className="h-16 w-16 rounded object-cover"
+                      />
+                    </button>
+                  )
                 )}
 
               </div>
+            )}
 
-              <h1 className="mt-4 text-3xl font-bold text-gray-900">
-                {product.title}
-              </h1>
+          </div>
 
-              <p className="mt-4 leading-7 text-gray-600">
-                {product.description}
+          {/* Product information */}
+          <div className="rounded-xl border bg-white p-6 shadow-sm">
+
+            {/* Category */}
+            <p className="text-sm font-medium uppercase tracking-wide text-gray-500">
+              {product.category}
+            </p>
+
+            {/* Title */}
+            <h1 className="mt-2 text-3xl font-bold text-gray-900">
+              {product.title}
+            </h1>
+
+            {/* Description */}
+            <p className="mt-4 leading-7 text-gray-600">
+              {product.description}
+            </p>
+
+            {/* Price / Rating */}
+            <div className="mt-6 flex flex-wrap items-center gap-4">
+
+              <p className="text-3xl font-bold text-gray-900">
+                $
+                {(product.price ?? 0).toFixed(
+                  2
+                )}
               </p>
 
-              {/* Price */}
-              <div className="mt-6">
+              <span className="rounded-full bg-yellow-50 px-3 py-1 text-sm font-medium text-yellow-700">
+                ⭐{" "}
+                {(product.rating ?? 0).toFixed(
+                  2
+                )}
+              </span>
 
-                <p className="text-3xl font-bold text-gray-900">
-                  ${product.price.toFixed(2)}
-                </p>
+            </div>
 
-                {product.discountPercentage && (
-                  <p className="mt-1 text-sm text-green-600">
-                    {product.discountPercentage.toFixed(
-                      1
-                    )}
-                    % discount
-                  </p>
+            {/* Stock */}
+            <div className="mt-4">
+
+              <span
+                className={
+                  (product.stock ?? 0) > 0
+                    ? "font-medium text-green-600"
+                    : "font-medium text-red-600"
+                }
+              >
+                {product.stock ?? 0}{" "}
+                in stock
+              </span>
+
+            </div>
+
+            {/* Product information */}
+            <div className="mt-8 border-t pt-6">
+
+              <h2 className="font-semibold text-gray-900">
+                Product Information
+              </h2>
+
+              <dl className="mt-4 space-y-3 text-sm">
+
+                {product.brand && (
+                  <div className="flex justify-between gap-4">
+                    <dt className="text-gray-500">
+                      Brand
+                    </dt>
+
+                    <dd className="font-medium text-gray-900">
+                      {product.brand}
+                    </dd>
+                  </div>
                 )}
 
-              </div>
-
-              {/* Rating / Stock */}
-              <div className="mt-6 grid grid-cols-2 gap-4">
-
-                <div className="rounded-lg bg-gray-50 p-4">
-                  <p className="text-xs text-gray-500">
-                    Rating
-                  </p>
-
-                  <p className="mt-1 font-semibold text-gray-900">
-                    ⭐{" "}
-                    {product.rating}
-                  </p>
-                </div>
-
-                <div className="rounded-lg bg-gray-50 p-4">
-                  <p className="text-xs text-gray-500">
-                    Stock
-                  </p>
-
-                  <p className="mt-1 font-semibold text-gray-900">
-                    {product.stock}
-                  </p>
-                </div>
-
-              </div>
-
-              {/* Additional information */}
-              <div className="mt-6 space-y-3 border-t pt-6">
-
                 {product.sku && (
-                  <div className="flex justify-between gap-4 text-sm">
-                    <span className="text-gray-500">
+                  <div className="flex justify-between gap-4">
+                    <dt className="text-gray-500">
                       SKU
-                    </span>
+                    </dt>
 
-                    <span className="font-medium text-gray-900">
+                    <dd className="font-medium text-gray-900">
                       {product.sku}
-                    </span>
+                    </dd>
                   </div>
                 )}
 
                 {product.warrantyInformation && (
-                  <div className="flex justify-between gap-4 text-sm">
-                    <span className="text-gray-500">
+                  <div className="flex justify-between gap-4">
+                    <dt className="text-gray-500">
                       Warranty
-                    </span>
+                    </dt>
 
-                    <span className="text-right font-medium text-gray-900">
+                    <dd className="text-right font-medium text-gray-900">
                       {product.warrantyInformation}
-                    </span>
+                    </dd>
                   </div>
                 )}
 
                 {product.shippingInformation && (
-                  <div className="flex justify-between gap-4 text-sm">
-                    <span className="text-gray-500">
+                  <div className="flex justify-between gap-4">
+                    <dt className="text-gray-500">
                       Shipping
-                    </span>
+                    </dt>
 
-                    <span className="text-right font-medium text-gray-900">
+                    <dd className="text-right font-medium text-gray-900">
                       {product.shippingInformation}
-                    </span>
+                    </dd>
                   </div>
                 )}
 
-              </div>
+                {product.availabilityStatus && (
+                  <div className="flex justify-between gap-4">
+                    <dt className="text-gray-500">
+                      Availability
+                    </dt>
+
+                    <dd className="font-medium text-gray-900">
+                      {product.availabilityStatus}
+                    </dd>
+                  </div>
+                )}
+
+              </dl>
 
             </div>
 
@@ -358,73 +441,50 @@ export default function ProductDetailsPage() {
         </div>
 
         {/* Reviews */}
-        <div className="mt-6 rounded-xl border bg-white p-6 shadow-sm">
+        {product.reviews &&
+          product.reviews.length > 0 && (
+            <section className="mt-8 rounded-xl border bg-white p-6 shadow-sm">
 
-          <h2 className="text-xl font-bold text-gray-900">
-            Reviews
-          </h2>
+              <h2 className="text-xl font-bold text-gray-900">
+                Reviews
+              </h2>
 
-          {!product.reviews ||
-          product.reviews.length === 0 ? (
-            <p className="mt-4 text-sm text-gray-500">
-              No reviews available.
-            </p>
-          ) : (
-            <div className="mt-6 space-y-4">
+              <div className="mt-5 space-y-4">
 
-              {product.reviews.map(
-                (review, index) => (
-                  <div
-                    key={`${review.reviewerEmail}-${index}`}
-                    className="rounded-lg border p-4"
-                  >
+                {product.reviews.map(
+                  (review, index) => (
+                    <article
+                      key={`${review.reviewerEmail}-${index}`}
+                      className="rounded-lg border p-4"
+                    >
 
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
 
-                      <div>
                         <p className="font-medium text-gray-900">
                           {review.reviewerName}
                         </p>
 
-                        <p className="text-xs text-gray-500">
-                          {review.reviewerEmail}
-                        </p>
+                        <span className="text-sm text-yellow-600">
+                          ⭐{" "}
+                          {(
+                            review.rating ?? 0
+                          ).toFixed(1)}
+                        </span>
+
                       </div>
 
-                      <p className="text-sm">
-                        {"⭐".repeat(
-                          Math.max(
-                            0,
-                            Math.min(
-                              5,
-                              Math.round(
-                                review.rating
-                              )
-                            )
-                          )
-                        )}
+                      <p className="mt-2 text-sm leading-6 text-gray-600">
+                        {review.comment}
                       </p>
 
-                    </div>
+                    </article>
+                  )
+                )}
 
-                    <p className="mt-3 text-sm leading-6 text-gray-600">
-                      {review.comment}
-                    </p>
+              </div>
 
-                    <p className="mt-3 text-xs text-gray-400">
-                      {new Date(
-                        review.date
-                      ).toLocaleDateString()}
-                    </p>
-
-                  </div>
-                )
-              )}
-
-            </div>
+            </section>
           )}
-
-        </div>
 
       </section>
     </main>
