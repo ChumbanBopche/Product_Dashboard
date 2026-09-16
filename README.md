@@ -6,11 +6,11 @@ The application provides authenticated product management with search, filtering
 
 ## Live Demo
 
-Coming soon.
+https://product-dashboard-lac-seven.vercel.app/
 
 ## GitHub Repository
 
-Coming soon.
+https://github.com/ChumbanBopche/Product_Dashboard
 
 ---
 
