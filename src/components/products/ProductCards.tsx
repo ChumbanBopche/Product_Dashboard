@@ -1,6 +1,8 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
+
 import { Product } from "@/types/product";
 
 interface ProductCardsProps {
@@ -12,12 +14,16 @@ export default function ProductCards({
 }: ProductCardsProps) {
   return (
     <div className="grid gap-4 md:hidden">
+
       {products.map((product) => (
         <article
           key={product.id}
           className="rounded-xl border bg-white p-4 shadow-sm"
         >
+
+          {/* Product information */}
           <div className="flex gap-4">
+
             <Image
               src={product.thumbnail}
               alt={product.title}
@@ -27,6 +33,7 @@ export default function ProductCards({
             />
 
             <div className="min-w-0 flex-1">
+
               <h2 className="truncate font-semibold text-gray-900">
                 {product.title}
               </h2>
@@ -35,13 +42,17 @@ export default function ProductCards({
                 {product.category}
               </p>
 
-              <p className="mt-2 font-semibold">
+              <p className="mt-2 font-semibold text-gray-900">
                 ${product.price.toFixed(2)}
               </p>
+
             </div>
+
           </div>
 
-          <div className="mt-4 flex justify-between border-t pt-3 text-sm">
+          {/* Rating / Stock */}
+          <div className="mt-4 flex justify-between border-t pt-3 text-sm text-gray-600">
+
             <span>
               ⭐ {product.rating.toFixed(2)}
             </span>
@@ -49,9 +60,24 @@ export default function ProductCards({
             <span>
               Stock: {product.stock}
             </span>
+
           </div>
+
+          {/* View Details */}
+          <div className="mt-4 border-t pt-3">
+
+            <Link
+              href={`/products/${product.id}`}
+              className="block w-full rounded-lg bg-black px-4 py-2.5 text-center text-sm font-medium text-white transition hover:bg-gray-800"
+            >
+              View Details
+            </Link>
+
+          </div>
+
         </article>
       ))}
+
     </div>
   );
 }

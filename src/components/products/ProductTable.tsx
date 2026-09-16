@@ -1,6 +1,8 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
+
 import { Product } from "@/types/product";
 
 interface ProductTableProps {
@@ -14,6 +16,8 @@ export default function ProductTable({
     <div className="hidden overflow-hidden rounded-xl border bg-white shadow-sm md:block">
       <div className="overflow-x-auto">
         <table className="w-full text-left text-sm">
+
+          {/* Table Header */}
           <thead className="border-b bg-gray-50">
             <tr>
               <th className="px-6 py-4 font-semibold">
@@ -42,14 +46,17 @@ export default function ProductTable({
             </tr>
           </thead>
 
+          {/* Table Body */}
           <tbody className="divide-y">
             {products.map((product) => (
               <tr
                 key={product.id}
                 className="hover:bg-gray-50"
               >
+                {/* Product */}
                 <td className="px-6 py-4">
                   <div className="flex items-center gap-3">
+
                     <Image
                       src={product.thumbnail}
                       alt={product.title}
@@ -67,17 +74,21 @@ export default function ProductTable({
                         #{product.id}
                       </p>
                     </div>
+
                   </div>
                 </td>
 
+                {/* Category */}
                 <td className="px-6 py-4 capitalize">
                   {product.category}
                 </td>
 
+                {/* Price */}
                 <td className="px-6 py-4 font-medium">
                   ${product.price.toFixed(2)}
                 </td>
 
+                {/* Rating */}
                 <td className="px-6 py-4">
                   <span className="flex items-center gap-1">
                     <span>⭐</span>
@@ -85,6 +96,7 @@ export default function ProductTable({
                   </span>
                 </td>
 
+                {/* Stock */}
                 <td className="px-6 py-4">
                   <span
                     className={
@@ -97,14 +109,20 @@ export default function ProductTable({
                   </span>
                 </td>
 
+                {/* Actions */}
                 <td className="px-6 py-4">
-                  <button className="text-sm font-medium text-blue-600 hover:underline">
+                  <Link
+                    href={`/products/${product.id}`}
+                    className="text-sm font-medium text-blue-600 hover:underline"
+                  >
                     View
-                  </button>
+                  </Link>
                 </td>
+
               </tr>
             ))}
           </tbody>
+
         </table>
       </div>
     </div>
