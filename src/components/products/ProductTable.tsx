@@ -1,25 +1,67 @@
 "use client";
 
+import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 
+import { deleteProduct } from "@/services/product.service";
 import { Product } from "@/types/product";
 
 interface ProductTableProps {
   products: Product[];
+  onDeleted?: (id: number) => void;
 }
 
 export default function ProductTable({
   products,
+  onDeleted,
 }: ProductTableProps) {
+  const [deletingId, setDeletingId] =
+    useState<number | null>(null);
+
+  const handleDelete = async (
+    product: Product
+  ) => {
+    const confirmed = window.confirm(
+      `Are you sure you want to delete "${product.title}"?`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    // Prevent duplicate delete requests
+    if (deletingId !== null) {
+      return;
+    }
+
+    try {
+      setDeletingId(product.id);
+
+      await deleteProduct(product.id);
+
+      onDeleted?.(product.id);
+    } catch (error) {
+      console.error(error);
+
+      window.alert(
+        "Failed to delete product."
+      );
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   return (
     <div className="hidden overflow-hidden rounded-xl border bg-white shadow-sm md:block">
+
       <div className="overflow-x-auto">
+
         <table className="w-full text-left text-sm">
 
-          {/* Table Header */}
           <thead className="border-b bg-gray-50">
             <tr>
+
               <th className="px-6 py-4 font-semibold">
                 Product
               </th>
@@ -43,18 +85,21 @@ export default function ProductTable({
               <th className="px-6 py-4 font-semibold">
                 Actions
               </th>
+
             </tr>
           </thead>
 
-          {/* Table Body */}
           <tbody className="divide-y">
+
             {products.map((product) => (
               <tr
                 key={product.id}
                 className="hover:bg-gray-50"
               >
+
                 {/* Product */}
                 <td className="px-6 py-4">
+
                   <div className="flex items-center gap-3">
 
                     <Image
@@ -66,6 +111,7 @@ export default function ProductTable({
                     />
 
                     <div>
+
                       <p className="font-medium text-gray-900">
                         {product.title}
                       </p>
@@ -73,9 +119,11 @@ export default function ProductTable({
                       <p className="mt-1 text-xs text-gray-500">
                         #{product.id}
                       </p>
+
                     </div>
 
                   </div>
+
                 </td>
 
                 {/* Category */}
@@ -90,14 +138,17 @@ export default function ProductTable({
 
                 {/* Rating */}
                 <td className="px-6 py-4">
+
                   <span className="flex items-center gap-1">
                     <span>⭐</span>
                     {product.rating.toFixed(2)}
                   </span>
+
                 </td>
 
                 {/* Stock */}
                 <td className="px-6 py-4">
+
                   <span
                     className={
                       product.stock > 0
@@ -107,24 +158,56 @@ export default function ProductTable({
                   >
                     {product.stock}
                   </span>
+
                 </td>
 
                 {/* Actions */}
                 <td className="px-6 py-4">
-                  <Link
-                    href={`/products/${product.id}`}
-                    className="text-sm font-medium text-blue-600 hover:underline"
-                  >
-                    View
-                  </Link>
+
+                  <div className="flex items-center gap-3">
+
+                    <Link
+                      href={`/products/${product.id}`}
+                      className="text-sm font-medium text-blue-600 hover:underline"
+                    >
+                      View
+                    </Link>
+
+                    <Link
+                      href={`/products/${product.id}/edit`}
+                      className="text-sm font-medium text-gray-700 hover:underline"
+                    >
+                      Edit
+                    </Link>
+
+                    <button
+                      onClick={() =>
+                        handleDelete(product)
+                      }
+                      disabled={
+                        deletingId !== null
+                      }
+                      className="text-sm font-medium text-red-600 hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {deletingId ===
+                      product.id
+                        ? "Deleting..."
+                        : "Delete"}
+                    </button>
+
+                  </div>
+
                 </td>
 
               </tr>
             ))}
+
           </tbody>
 
         </table>
+
       </div>
+
     </div>
   );
 }

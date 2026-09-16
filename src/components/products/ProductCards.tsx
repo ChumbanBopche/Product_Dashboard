@@ -64,15 +64,19 @@ export default function ProductCards({
           </div>
 
           {/* View Details */}
-          <div className="mt-4 border-t pt-3">
+          <div className="mt-4 flex gap-2 border-t pt-3">
 
             <Link
               href={`/products/${product.id}`}
-              className="block w-full rounded-lg bg-black px-4 py-2.5 text-center text-sm font-medium text-white transition hover:bg-gray-800"
-            >
-              View Details
+              className="flex-1 rounded-lg bg-black px-4 py-2.5 text-center text-sm font-medium text-white transition hover:bg-gray-800">
+              View
             </Link>
 
+            <Link
+              href={`/products/${product.id}/edit`}
+              className="flex-1 rounded-lg border px-4 py-2.5 text-center text-sm font-medium text-gray-700 transition hover:bg-gray-50">
+              Edit
+            </Link>
           </div>
 
         </article>

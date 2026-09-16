@@ -823,6 +823,18 @@ function ProductDashboardContent() {
             {/* Desktop table */}
             <ProductTable
               products={products}
+              onDeleted={(deletedId) => {
+                setProducts((currentProducts) =>
+                  currentProducts.filter(
+                    (product) =>
+                      product.id !== deletedId
+                  )
+                );
+
+                setTotal((currentTotal) =>
+                  Math.max(0, currentTotal - 1)
+                );
+              }}
             />
 
             {/* Mobile cards */}
